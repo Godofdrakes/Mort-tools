@@ -1,0 +1,29 @@
+
+varbit
+11 has something to do with building
+    goes down while building
+    resets after going below 15000
+        starts at 15800?
+8354 ???
+    goes slowly up
+
+varplayer
+345 sanctity%
+344 resources%
+343 repair%
+
+game objects
+4068-4078 side wall 0-100%
+    id increases by 1 until full
+4079-4089 corner wall 0-100%
+    id increases by 1 until full
+4090 flaming fire altar
+    4091 unlit fire altar
+    4092 unlit fire altar (for like one tick)
+
+map region
+13874 burg
+13875 temple
+
+widget
+11206658 temple UI
