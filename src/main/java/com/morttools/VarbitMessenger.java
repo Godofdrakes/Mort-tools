@@ -2,70 +2,37 @@ package com.morttools;
 
 import net.runelite.api.events.VarbitChanged;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 public class VarbitMessenger
 {
-	public void addVarbitHandler( int id, VarbitHandler handler )
+	public interface IChangedHandler
 	{
-		assert ( handler != null );
-		findHandlerList( varbitChanged, id, true ).add( handler );
+		void invoke( int value );
 	}
 
-	public void addVarpHandler( int id, VarbitHandler handler )
+	public void varbitChanged( VarbitChanged event )
 	{
-		assert ( handler != null );
-		findHandlerList( varpChanged, id, true ).add( handler );
-	}
-
-	public void removeVarbitHandler( int id, VarbitHandler handler )
-	{
-		assert ( handler != null );
-		findHandlerList( varbitChanged, id, false ).remove( handler );
-	}
-
-	public void removeVarpHandler( int id, VarbitHandler handler )
-	{
-		assert ( handler != null );
-		findHandlerList( varpChanged, id, false ).remove( handler );
-	}
-
-	public void invoke( VarbitChanged event )
-	{
-		List<VarbitHandler> handlerList = null;
-
 		assert ( event.getVarpId() != -1 || event.getVarbitId() != -1 );
 
-		if ( event.getVarbitId() != -1 )
+		if ( event.getVarpId() != -1 )
 		{
-			handlerList = findHandlerList( varbitChanged, event.getVarbitId(), false );
+			varpRouter.invoke( event.getVarpId(), event.getValue() );
 		}
-		else if ( event.getVarpId() != -1 )
+		else
 		{
-			handlerList = findHandlerList( varpChanged, event.getVarbitId(), false );
-		}
-
-		if ( handlerList != null )
-		{
-			handlerList.forEach( handler -> handler.varbitChanged( event.getValue() ) );
+			varbitRouter.invoke( event.getVarbitId(), event.getValue() );
 		}
 	}
 
-	private static List<VarbitHandler> findHandlerList( Map<Integer,List<VarbitHandler>> handlerMap, int id, boolean add )
+	public IMessageRouter<Integer,Integer> getVarbitRouter()
 	{
-		List<VarbitHandler> handlerList = handlerMap.getOrDefault( id, null );
-
-		if ( handlerList == null && add )
-		{
-			handlerList = handlerMap.put( id, new ArrayList<>() );
-		}
-
-		return handlerList;
+		return varbitRouter;
 	}
 
-	private final Map<Integer,List<VarbitHandler>> varbitChanged = new HashMap<>();
-	private final Map<Integer,List<VarbitHandler>> varpChanged = new HashMap<>();
+	public IMessageRouter<Integer,Integer> getVarpRouter()
+	{
+		return varpRouter;
+	}
+
+	private final MessageRouter<Integer,Integer> varbitRouter = new MessageRouter<>();
+	private final MessageRouter<Integer,Integer> varpRouter = new MessageRouter<>();
 }

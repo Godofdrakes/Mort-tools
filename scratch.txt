@@ -26,4 +26,68 @@ map region
 13875 temple
 
 widget
-11206658 temple UI
+
+2023-01-31 08:40:03 [Client] DEBUG com.morttools.MorttoolsPlugin - Widget group 171 loaded
+
+s 171.2
+Id	11206658
+Type	0
+ContentType	0
+ParentId	11206657
+SelfHidden	false
+Hidden	false
+Text
+TextColor	0
+Opacity	0
+FontId	-1
+TextShadowed	false
+Name
+ItemId	-1
+ItemQuantity	0
+ItemQuantityMode	2
+ModelId	-1
+ModelType	1
+AnimationId	-1
+RotationX	0
+RotationY	0
+RotationZ	0
+ModelZoom	100
+SpriteId	-1
+SpriteTiling	false
+BorderType	0
+IsIf3	true
+HasListener	true
+Filled	false
+OriginalX	4
+OriginalY	4
+OriginalWidth	139
+OriginalHeight	62
+XPositionMode	2
+YPositionMode	0
+WidthMode	0
+HeightMode	0
+LineHeight	0
+XTextAlignment	0
+YTextAlignment	0
+RelativeX	405
+RelativeY	4
+Width	139
+Height	62
+CanvasLocation	Point(x=407, y=6)
+Bounds	java.awt.Rectangle[x=407,y=6,width=139,height=62]
+ScrollX	0
+ScrollY	0
+ScrollWidth	0
+ScrollHeight	0
+DragDeadZone	0
+DragDeadTime	0
+NoClickThrough	false
+NoScrollThrough	false
+TargetVerb
+DragParent	null
+ModalMode	null
+OnOpListener	null
+OnKeyListener	null
+OnLoadListener	[947, 11206661, 11206663, 11206665]
+OnInvTransmitListener	null
+OnVarTransmitListener	[947, 11206661, 11206663, 11206665]
