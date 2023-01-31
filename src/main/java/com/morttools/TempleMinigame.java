@@ -1,6 +1,7 @@
 package com.morttools;
 
 import lombok.Getter;
+import net.runelite.api.widgets.WidgetInfo;
 
 public class TempleMinigame
 {
@@ -11,6 +12,8 @@ public class TempleMinigame
     public static final int RegionId = 13875;
 
     public static final int WidgetGroup = 171;
+    public static final int WidgetChild = 2;
+    public static final int WidgetId = WidgetInfo.PACK( WidgetGroup, WidgetChild );
 
     public static boolean IsNowFull( int oldValue, int value )
     {

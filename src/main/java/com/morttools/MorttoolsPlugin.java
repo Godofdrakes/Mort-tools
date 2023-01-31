@@ -10,7 +10,6 @@ import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.widgets.Widget;
-import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.Notifier;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -96,7 +95,7 @@ public class MorttoolsPlugin extends Plugin
 			.connect( TempleMinigame.WidgetGroup, ( client ) ->
 			{
 				// @todo right group, wrong child id?
-				Widget widget = client.getWidget( WidgetInfo.PACK( 172, 2 ) );
+				Widget widget = client.getWidget( TempleMinigame.WidgetId );
 				if ( widget != null )
 				{
 					widget.setHidden( true );
