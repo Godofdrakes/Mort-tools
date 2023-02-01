@@ -100,14 +100,26 @@ public class MorttoolsPlugin extends Plugin
 		subscriptions.add( resourcesChanged.subscribe( value -> templeOverlay.setResources( value ) ) );
 		subscriptions.add( sanctityChanged.subscribe( value -> templeOverlay.setSanctity( value ) ) );
 
-		subscriptions.add( IsFull( sanctityChanged, 100 )
-			// when sanctity is full
-			.filter( isFull -> isFull == true )
-			// while notifications are enabled
-			.takeWhile( isFull -> config.getNotifySanctity() )
+		subscriptions.add( IsLow( repairChanged, 90 )
+			// when repair goes low
+			.filter( isLow -> isLow == true )
+			// if notifications are enabled
+			.takeWhile( isLow -> config.getNotifyRepair() )
 			// no more than once every five seconds
 			.throttleLast( 5, TimeUnit.SECONDS )
-			// notify sanctity is full
+			// notify the player
+			.subscribe( isLow -> notifier.notify( TempleNotifications.repairLowText ) ) );
+
+		subscriptions.add( IsLow( resourcesChanged, 10 )
+			.filter( isLow -> isLow == true )
+			.takeWhile( isLow -> config.getNotifyResources() )
+			.throttleLast( 5, TimeUnit.SECONDS )
+			.subscribe( isLow -> notifier.notify( TempleNotifications.resourcesLowText ) ) );
+
+		subscriptions.add( IsFull( sanctityChanged, 100 )
+			.filter( isFull -> isFull == true )
+			.takeWhile( isFull -> config.getNotifySanctity() )
+			.throttleLast( 5, TimeUnit.SECONDS )
 			.subscribe( isFull -> notifier.notify( TempleNotifications.sanctityFullText ) ) );
 
 		final val regionChanged = gameStateChanged
