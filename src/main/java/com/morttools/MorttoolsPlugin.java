@@ -1,6 +1,8 @@
 package com.morttools;
 
 import com.google.inject.Provides;
+import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.subjects.PublishSubject;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
@@ -11,6 +13,7 @@ import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.Notifier;
+import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
@@ -18,7 +21,10 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.Executor;
 
 @Slf4j
 @PluginDescriptor(
@@ -35,6 +41,25 @@ public class MorttoolsPlugin extends Plugin
 
 		return Optional.of( player.getWorldLocation() );
 	}
+
+	private class ClientExecutor implements Executor
+	{
+		private final ClientThread clientThread;
+
+		public ClientExecutor( ClientThread clientThread )
+		{
+			this.clientThread = clientThread;
+		}
+
+		@Override
+		public void execute( Runnable command )
+		{
+			clientThread.invoke( command );
+		}
+	}
+
+	@Inject
+	private ClientThread clientThread;
 
 	@Inject
 	private OverlayManager overlayManager;
@@ -56,6 +81,10 @@ public class MorttoolsPlugin extends Plugin
 	private TempleMinigame templeMinigame = new TempleMinigame();
 	private TempleNotifications templeNotifications = new TempleNotifications();
 	private TempleOverlay templeOverlay = new TempleOverlay();
+
+	private final PublishSubject<WidgetLoaded> widgetLoaded = PublishSubject.create();
+
+	private final List<Disposable> subscriptions = new ArrayList<>();
 
 	public MorttoolsPlugin()
 	{
@@ -106,13 +135,20 @@ public class MorttoolsPlugin extends Plugin
 	@Override
 	protected void startUp() throws Exception
 	{
+		Executor clientExecutor = new ClientExecutor( clientThread );
 
+		subscriptions.add( widgetLoaded
+			.filter( event -> event.getGroupId() == TempleMinigame.WidgetGroup )
+			.subscribe( event -> log.debug( "Temple widget group loaded" ) ) );
 	}
 
 	@Override
 	protected void shutDown() throws Exception
 	{
 		overlayManager.remove( templeOverlay );
+
+		subscriptions.forEach( disposable -> disposable.dispose() );
+		subscriptions.clear();
 	}
 
 	@Subscribe
@@ -131,6 +167,8 @@ public class MorttoolsPlugin extends Plugin
 	public void onWidgetLoaded( WidgetLoaded event )
 	{
 		widgetMessenger.widgetLoaded( event.getGroupId(), client );
+
+		widgetLoaded.onNext( event );
 	}
 
 	@Provides
