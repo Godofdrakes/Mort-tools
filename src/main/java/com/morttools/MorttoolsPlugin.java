@@ -3,6 +3,7 @@ package com.morttools;
 import com.google.inject.Provides;
 import io.reactivex.rxjava3.core.Observable;
 import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.schedulers.Schedulers;
 import io.reactivex.rxjava3.subjects.PublishSubject;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -23,7 +24,6 @@ import net.runelite.client.ui.overlay.OverlayManager;
 import javax.inject.Inject;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -54,8 +54,7 @@ public class MorttoolsPlugin extends Plugin
 	private final PublishSubject<WidgetLoaded> widgetLoaded = PublishSubject.create();
 	private final PublishSubject<VarbitChanged> varbitChanged = PublishSubject.create();
 	private final PublishSubject<GameStateChanged> gameStateChanged = PublishSubject.create();
-	private final PublishSubject<MorttoolsPlugin> pluginStartUp = PublishSubject.create();
-	private final PublishSubject<MorttoolsPlugin> pluginShutDown = PublishSubject.create();
+	private final PublishSubject<Boolean> pluginEnabled = PublishSubject.create();
 
 	private final List<Disposable> subscriptions = new ArrayList<>();
 
@@ -69,7 +68,7 @@ public class MorttoolsPlugin extends Plugin
 	private static Observable<Boolean> IsLow( Observable<Integer> observable, int threshold )
 	{
 		return observable
-			.map( value -> value < threshold )
+			.map( value -> value <= threshold )
 			.distinctUntilChanged();
 	}
 
@@ -78,8 +77,10 @@ public class MorttoolsPlugin extends Plugin
 	{
 		log.debug( "startUp" );
 
-		// allows events sent from task threads to be observed on the client thread
-		// final val clientScheduler = Schedulers.from( runnable -> clientThread.invoke( runnable ) );
+		// config changes are pushed from a background thread
+		// we need to observe these changes on the client thread to avoid threading issues
+		final val clientConfigChanged = configChanged
+			.observeOn( Schedulers.from( runnable -> clientThread.invoke( runnable ) ) );
 
 		final val repairChanged = varbitChanged
 			// when repair changes
@@ -122,58 +123,55 @@ public class MorttoolsPlugin extends Plugin
 			.throttleLast( 5, TimeUnit.SECONDS )
 			.subscribe( isFull -> notifier.notify( TempleNotifications.sanctityFullText ) ) );
 
-		final val regionChanged = gameStateChanged
-			// when logged in
-			.filter( event -> event.getGameState() == GameState.LOGGED_IN )
-			.map( event -> (Object) event )
-			// or when the plugin starts up
-			.mergeWith( pluginStartUp.map( plugin -> (Object) plugin ) )
-			// get world region
-			.map( o ->
-			{
-				val player = client.getLocalPlayer();
-				return player != null ? player.getWorldLocation().getRegionID() : -1;
-			} )
+		final val regionChanged = Observable.fromCallable( () -> -1 )
+			.concatWith( gameStateChanged
+				// when logged in
+				.filter( event -> event.getGameState() == GameState.LOGGED_IN )
+				// get world region
+				.map( event ->
+				{
+					val player = client.getLocalPlayer();
+					return player != null ? player.getWorldLocation().getRegionID() : -1;
+				} ) )
 			// only emit when value changes
 			.distinctUntilChanged();
 
-		if ( log.isDebugEnabled() )
-		{
-			subscriptions.add( regionChanged
-				.subscribe( regionId -> log.debug( "entered region {}", regionId ) ) );
-		}
-
 		final val isInTemple = regionChanged
-			// is temple region?
 			.map( regionId -> regionId == TempleMinigame.RegionId );
 
-		subscriptions.add( isInTemple
+		final val pluginIsEnabled = pluginEnabled
+			.filter( value -> value == true );
+
+		final val shouldReplaceWidget = Observable.fromCallable( () -> config.getReplaceWidget() )
+			.concatWith( configChanged
+				// when value changes
+				.filter( event -> event.getKey() == MorttoolsConfig.replaceWidget )
+				// get latest value
+				.map( event -> config.getReplaceWidget() ) );
+
+		final val showOverlay = Observable.combineLatest(
+				pluginIsEnabled,
+				shouldReplaceWidget,
+				isInTemple,
+				( a, b, c ) -> a && b && c )
+			.distinctUntilChanged();
+
+		subscriptions.add( showOverlay
 			.filter( value -> value == true )
 			.subscribe( value -> overlayManager.add( templeOverlay ) ) );
-		subscriptions.add( isInTemple
+
+		subscriptions.add( showOverlay
 			.filter( value -> value == false )
 			.subscribe( value -> overlayManager.remove( templeOverlay ) ) );
 
-		subscriptions.add( widgetLoaded
-			// when temple widgets are loaded
-			.filter( event -> event.getGroupId() == TempleMinigame.WidgetGroup )
-			.map( event -> (Object) event )
-			// or when plugin starts up
-			.mergeWith( pluginStartUp.map( plugin -> (Object) plugin ) )
-			.map( o -> Optional.ofNullable( client.getWidget( TempleMinigame.WidgetId ) ) ) // RxJava does not allow null
-			.filter( widget -> widget.isPresent() )
-			// hide temple widgets
-			.subscribe( widget -> widget.get().setHidden( true ) ) );
+		subscriptions.add( showOverlay
+			.subscribe( value ->
+			{
+				final val widget = client.getWidget( TempleMinigame.WidgetId );
+				if ( widget != null ) widget.setHidden( value );
+			} ) );
 
-		// on plugin shutdown
-		subscriptions.add( pluginShutDown
-			// if temple widgets are loaded
-			.map( event -> Optional.ofNullable( client.getWidget( TempleMinigame.WidgetId ) ) )
-			.filter( widget -> widget.isPresent() )
-			// un-hide temple widgets
-			.subscribe( widget -> widget.get().setHidden( false ) ) );
-
-		pluginStartUp.onNext( this );
+		pluginEnabled.onNext( true );
 	}
 
 	@Override
@@ -181,7 +179,7 @@ public class MorttoolsPlugin extends Plugin
 	{
 		log.debug( "shutDown" );
 
-		pluginShutDown.onNext( this );
+		pluginEnabled.onNext( false );
 
 		subscriptions.forEach( disposable -> disposable.dispose() );
 		subscriptions.clear();

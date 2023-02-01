@@ -41,17 +41,17 @@ public class TempleOverlay extends Overlay
 
 	public TempleOverlay()
 	{
+		repairColors.add( new ColorSetting( 100, Color.GREEN ) );
+		repairColors.add( new ColorSetting( 90, Color.YELLOW ) );
+		repairColors.add( new ColorSetting( 0, Color.RED ) );
+
+		resourceColors.add( new ColorSetting( 100, Color.GREEN ) );
+		resourceColors.add( new ColorSetting( 10, Color.YELLOW ) );
+		resourceColors.add( new ColorSetting( 0, Color.RED ) );
+
 		sanctityColors.add( new ColorSetting( 100, Color.GREEN ) );
 		sanctityColors.add( new ColorSetting( 10, Color.YELLOW ) );
 		sanctityColors.add( new ColorSetting( 0, Color.RED ) );
-
-		resourceColors.add( new ColorSetting( 100, Color.GREEN ) );
-		resourceColors.add( new ColorSetting( 50, Color.YELLOW ) );
-		resourceColors.add( new ColorSetting( 0, Color.RED ) );
-
-		repairColors.add( new ColorSetting( 100, Color.GREEN ) );
-		repairColors.add( new ColorSetting( 50, Color.YELLOW ) );
-		repairColors.add( new ColorSetting( 0, Color.RED ) );
 
 		setPosition( OverlayPosition.TOP_RIGHT );
 		setPriority( OverlayPriority.HIGHEST );
