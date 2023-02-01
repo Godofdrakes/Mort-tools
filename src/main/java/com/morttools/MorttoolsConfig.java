@@ -8,6 +8,8 @@ import net.runelite.client.config.ConfigSection;
 @ConfigGroup( "morttools" )
 public interface MorttoolsConfig extends Config
 {
+	public static final String notifySanctity = "notifySanctity";
+
 	@ConfigSection(
 		name = "Temple",
 		description = "Temple",
@@ -16,7 +18,7 @@ public interface MorttoolsConfig extends Config
 	String templeSection = "templeSection";
 
 	@ConfigItem(
-		keyName = "notifySanctity",
+		keyName = notifySanctity,
 		name = "Notify on full sanctity",
 		description = "Trigger a notification when the temple's sanctity reaches 100%",
 		section = templeSection

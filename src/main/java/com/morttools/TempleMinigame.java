@@ -1,6 +1,5 @@
 package com.morttools;
 
-import lombok.Getter;
 import net.runelite.api.widgets.WidgetInfo;
 
 public class TempleMinigame
@@ -14,87 +13,4 @@ public class TempleMinigame
     public static final int WidgetGroup = 171;
     public static final int WidgetChild = 2;
     public static final int WidgetId = WidgetInfo.PACK( WidgetGroup, WidgetChild );
-
-    public static boolean IsNowFull( int oldValue, int value )
-    {
-        return oldValue < 100 && value >= 100;
-    }
-
-    public static boolean IsNowNone( int oldValue, int value )
-    {
-        return oldValue > 0 && value <= 100;
-    }
-
-    public enum Event
-    {
-        SanctityChanged,
-        SanctityFull,
-        SanctityNone,
-
-        ResourcesChanged,
-        ResourcesFull,
-        ResourcesNone,
-
-        RepairChanged,
-        RepairFull,
-        RepairNone,
-    }
-
-    public void setSanctity( int value )
-    {
-        final int oldValue = sanctity;
-
-        sanctity = value;
-
-        eventRouter.invoke( Event.SanctityChanged, this );
-
-        if ( IsNowFull( oldValue, value ) )
-            eventRouter.invoke( Event.SanctityFull, this );
-        else if ( IsNowNone( oldValue, value ) )
-            eventRouter.invoke( Event.SanctityNone, this );
-    }
-
-    public void setResources( int value )
-    {
-        final int oldValue = resources;
-
-        resources = value;
-
-        eventRouter.invoke( Event.ResourcesChanged, this );
-
-        if ( IsNowFull( oldValue, value ) )
-            eventRouter.invoke( Event.ResourcesFull, this );
-        else if ( IsNowNone( oldValue, value ) )
-            eventRouter.invoke( Event.ResourcesNone, this );
-    }
-
-    public void setRepair( int value )
-    {
-        final int oldValue = repair;
-
-        repair = value;
-
-        eventRouter.invoke( Event.RepairChanged, this );
-
-        if ( IsNowFull( oldValue, value ) )
-            eventRouter.invoke( Event.RepairFull, this );
-        else if ( IsNowNone( oldValue, value ) )
-            eventRouter.invoke( Event.RepairNone, this );
-    }
-
-    public IMessageRouter<Event,TempleMinigame> getEventRouter()
-    {
-        return eventRouter;
-    }
-
-    @Getter
-    private int sanctity;
-
-    @Getter
-    private int resources;
-
-    @Getter
-    private int repair;
-
-    private final MessageRouter<Event,TempleMinigame> eventRouter = new MessageRouter<>();
 }
