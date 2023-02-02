@@ -10,10 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
-import net.runelite.api.events.GameStateChanged;
-import net.runelite.api.events.VarbitChanged;
-import net.runelite.api.events.WidgetClosed;
-import net.runelite.api.events.WidgetLoaded;
+import net.runelite.api.events.*;
 import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -50,6 +47,9 @@ public class MorttoolsPlugin extends Plugin
 	private final PublishSubject<WidgetClosed> widgetClosed = PublishSubject.create();
 	private final PublishSubject<VarbitChanged> varbitChanged = PublishSubject.create();
 	private final PublishSubject<GameStateChanged> gameStateChanged = PublishSubject.create();
+
+	private final PublishSubject<GameObjectSpawned> gameObjectSpawned = PublishSubject.create();
+	private final PublishSubject<GameObjectDespawned> gameObjectDespawned = PublishSubject.create();
 	private final BehaviorSubject<Integer> regionChanged = BehaviorSubject.create();
 
 	public Observable<ConfigChanged> getConfigChanged()
@@ -75,6 +75,16 @@ public class MorttoolsPlugin extends Plugin
 	public Observable<GameStateChanged> getGameStateChanged()
 	{
 		return gameStateChanged;
+	}
+
+	public Observable<GameObjectSpawned> getGameObjectSpawned()
+	{
+		return gameObjectSpawned;
+	}
+
+	public Observable<GameObjectDespawned> getGameObjectDespawned()
+	{
+		return gameObjectDespawned;
 	}
 
 	public Observable<Integer> getRegionChanged()
@@ -135,6 +145,16 @@ public class MorttoolsPlugin extends Plugin
 			// only emit when value changes
 			.distinctUntilChanged()
 			.subscribe( regionChanged::onNext ) );
+
+//		if ( log.isDebugEnabled() )
+//		{
+//			disposable.addAll(
+//				this.getConfigChanged().subscribe( event -> log.debug( "configChanged: {}", event.getKey() ) ),
+//				this.getRegionChanged().subscribe( regionId -> log.debug( "regionChanged: {}", regionId ) ),
+//				this.getWidgetLoaded().subscribe( event -> log.debug( "widgetLoaded: {}", event.getGroupId() ) ),
+//				this.getWidgetClosed().subscribe( event -> log.debug( "widgetClosed: {}", event.getGroupId() ) )
+//			);
+//		}
 	}
 
 	@Override
@@ -166,6 +186,24 @@ public class MorttoolsPlugin extends Plugin
 	public void onWidgetLoaded( WidgetLoaded event )
 	{
 		widgetLoaded.onNext( event );
+	}
+
+	@Subscribe
+	public void onWidgetClosed( WidgetClosed event )
+	{
+		widgetClosed.onNext( event );
+	}
+
+	@Subscribe
+	public void onGameObjectSpawned( GameObjectSpawned event )
+	{
+		gameObjectSpawned.onNext( event );
+	}
+
+	@Subscribe
+	public void onGameObjectDespawned( GameObjectDespawned event )
+	{
+		gameObjectDespawned.onNext( event );
 	}
 
 	@Provides
