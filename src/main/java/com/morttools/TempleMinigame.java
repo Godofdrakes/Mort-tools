@@ -1,16 +1,59 @@
 package com.morttools;
 
-import net.runelite.api.widgets.WidgetInfo;
+import io.reactivex.rxjava3.core.Observable;
+import io.reactivex.rxjava3.core.Scheduler;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.disposables.Disposable;
 
-public class TempleMinigame
+public class TempleMinigame implements Disposable
 {
-    public static final int VarpSanctity = 345;
-    public static final int VarpResources = 344;
-    public static final int VarpRepair = 343;
+	private static final int VARP_REPAIR = 343;
+	private static final int VARP_RESOURCES = 344;
+	private static final int VARP_SANCTITY = 345;
 
-    public static final int RegionId = 13875;
+	private static final int REGION_TEMPLE = 13875;
 
-    public static final int WidgetGroup = 171;
-    public static final int WidgetChild = 2;
-    public static final int WidgetId = WidgetInfo.PACK( WidgetGroup, WidgetChild );
+	public final Observable<Integer> repair;
+	public final Observable<Integer> resources;
+	public final Observable<Integer> sanctity;
+
+	private final CompositeDisposable disposable = new CompositeDisposable();
+
+	public TempleMinigame( MorttoolsPlugin plugin, Scheduler scheduler )
+	{
+		repair = plugin.getVarbitChanged()
+			// when repair changes
+			.filter( event -> event.getVarpId() == VARP_REPAIR )
+			// get latest value
+			.map( event -> event.getValue() );
+
+		resources = plugin.getVarbitChanged()
+			.filter( event -> event.getVarpId() == VARP_RESOURCES )
+			.map( event -> event.getValue() );
+
+		sanctity = plugin.getVarbitChanged()
+			.filter( event -> event.getVarpId() == VARP_SANCTITY )
+			.map( event -> event.getValue() );
+
+		if ( plugin.getLog().isDebugEnabled() )
+		{
+			disposable.addAll(
+				repair.subscribe( value -> plugin.getLog().debug( "repair: {}", value ) ),
+				resources.subscribe( value -> plugin.getLog().debug( "resources: {}", value ) ),
+				sanctity.subscribe( value -> plugin.getLog().debug( "sanctity: {}", value ) )
+			);
+		}
+	}
+
+	@Override
+	public void dispose()
+	{
+		disposable.dispose();
+	}
+
+	@Override
+	public boolean isDisposed()
+	{
+		return disposable.isDisposed();
+	}
 }

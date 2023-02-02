@@ -2,8 +2,9 @@ package com.morttools;
 
 import com.google.inject.Provides;
 import io.reactivex.rxjava3.core.Observable;
-import io.reactivex.rxjava3.disposables.Disposable;
+import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
+import io.reactivex.rxjava3.subjects.BehaviorSubject;
 import io.reactivex.rxjava3.subjects.PublishSubject;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -11,6 +12,7 @@ import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.VarbitChanged;
+import net.runelite.api.events.WidgetClosed;
 import net.runelite.api.events.WidgetLoaded;
 import net.runelite.client.Notifier;
 import net.runelite.client.callback.ClientThread;
@@ -20,11 +22,9 @@ import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
+import org.slf4j.Logger;
 
 import javax.inject.Inject;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @PluginDescriptor(
@@ -33,156 +33,115 @@ import java.util.concurrent.TimeUnit;
 public class MorttoolsPlugin extends Plugin
 {
 	@Inject
-	private ClientThread clientThread;
-
-	@Inject
 	private OverlayManager overlayManager;
-
+	@Inject
+	private ClientThread clientThread;
+	@Inject
+	private MorttoolsConfig config;
+	@Inject
+	private Notifier notifier;
 	@Inject
 	private Client client;
 
-	@Inject
-	private Notifier notifier;
-
-	@Inject
-	private MorttoolsConfig config;
-
-
-	private final TempleOverlay templeOverlay = new TempleOverlay();
+	private CompositeDisposable disposable;
 
 	private final PublishSubject<ConfigChanged> configChanged = PublishSubject.create();
 	private final PublishSubject<WidgetLoaded> widgetLoaded = PublishSubject.create();
+	private final PublishSubject<WidgetClosed> widgetClosed = PublishSubject.create();
 	private final PublishSubject<VarbitChanged> varbitChanged = PublishSubject.create();
 	private final PublishSubject<GameStateChanged> gameStateChanged = PublishSubject.create();
-	private final PublishSubject<Boolean> pluginEnabled = PublishSubject.create();
+	private final BehaviorSubject<Integer> regionChanged = BehaviorSubject.create();
 
-	private final List<Disposable> subscriptions = new ArrayList<>();
-
-	private static Observable<Boolean> IsFull( Observable<Integer> observable, int threshold )
+	public Observable<ConfigChanged> getConfigChanged()
 	{
-		return observable
-			.map( value -> value >= threshold )
-			.distinctUntilChanged();
+		return configChanged;
 	}
 
-	private static Observable<Boolean> IsLow( Observable<Integer> observable, int threshold )
+	public Observable<WidgetLoaded> getWidgetLoaded()
 	{
-		return observable
-			.map( value -> value <= threshold )
-			.distinctUntilChanged();
+		return widgetLoaded;
+	}
+
+	public Observable<WidgetClosed> getWidgetClosed()
+	{
+		return widgetClosed;
+	}
+
+	public Observable<VarbitChanged> getVarbitChanged()
+	{
+		return varbitChanged;
+	}
+
+	public Observable<GameStateChanged> getGameStateChanged()
+	{
+		return gameStateChanged;
+	}
+
+	public Observable<Integer> getRegionChanged()
+	{
+		return regionChanged;
+	}
+
+	public OverlayManager getOverlayManager()
+	{
+		return overlayManager;
+	}
+
+	public MorttoolsConfig getConfig()
+	{
+		return config;
+	}
+
+	public Notifier getNotifier()
+	{
+		return notifier;
+	}
+
+	public Client getClient()
+	{
+		return client;
+	}
+
+	public Logger getLog()
+	{
+		return log;
 	}
 
 	@Override
 	protected void startUp() throws Exception
 	{
-		log.debug( "startUp" );
-
 		// config changes are pushed from a background thread
-		// we need to observe these changes on the client thread to avoid threading issues
-		final val clientConfigChanged = configChanged
-			.observeOn( Schedulers.from( runnable -> clientThread.invoke( runnable ) ) );
+		// must use a scheduler to safely observe events from the client thread instead
+		final val clientScheduler = Schedulers.from( runnable -> clientThread.invoke( runnable ) );
 
-		final val repairChanged = varbitChanged
-			// when repair changes
-			.filter( event -> event.getVarpId() == TempleMinigame.VarpRepair )
-			// get latest value
-			.map( event -> event.getValue() );
+		val templeMinigame = new TempleMinigame( this, clientScheduler );
 
-		final val resourcesChanged = varbitChanged
-			.filter( event -> event.getVarpId() == TempleMinigame.VarpResources )
-			.map( event -> event.getValue() );
+		disposable = new CompositeDisposable();
 
-		final val sanctityChanged = varbitChanged
-			.filter( event -> event.getVarpId() == TempleMinigame.VarpSanctity )
-			.map( event -> event.getValue() );
+		disposable.addAll(
+			templeMinigame,
+			new TempleOverlay( this, templeMinigame, clientScheduler ),
+			new TempleNotifications( this, templeMinigame, clientScheduler ) );
 
-		// push values to overlay
-		subscriptions.add( repairChanged.subscribe( value -> templeOverlay.setRepair( value ) ) );
-		subscriptions.add( resourcesChanged.subscribe( value -> templeOverlay.setResources( value ) ) );
-		subscriptions.add( sanctityChanged.subscribe( value -> templeOverlay.setSanctity( value ) ) );
-
-		subscriptions.add( IsLow( repairChanged, 90 )
-			// when repair goes low
-			.filter( isLow -> isLow == true )
-			// if notifications are enabled
-			.takeWhile( isLow -> config.getNotifyRepair() )
-			// no more than once every five seconds
-			.throttleLast( 5, TimeUnit.SECONDS )
-			// notify the player
-			.subscribe( isLow -> notifier.notify( TempleNotifications.repairLowText ) ) );
-
-		subscriptions.add( IsLow( resourcesChanged, 10 )
-			.filter( isLow -> isLow == true )
-			.takeWhile( isLow -> config.getNotifyResources() )
-			.throttleLast( 5, TimeUnit.SECONDS )
-			.subscribe( isLow -> notifier.notify( TempleNotifications.resourcesLowText ) ) );
-
-		subscriptions.add( IsFull( sanctityChanged, 100 )
-			.filter( isFull -> isFull == true )
-			.takeWhile( isFull -> config.getNotifySanctity() )
-			.throttleLast( 5, TimeUnit.SECONDS )
-			.subscribe( isFull -> notifier.notify( TempleNotifications.sanctityFullText ) ) );
-
-		final val regionChanged = Observable.fromCallable( () -> -1 )
-			.concatWith( gameStateChanged
-				// when logged in
-				.filter( event -> event.getGameState() == GameState.LOGGED_IN )
-				// get world region
-				.map( event ->
-				{
-					val player = client.getLocalPlayer();
-					return player != null ? player.getWorldLocation().getRegionID() : -1;
-				} ) )
-			// only emit when value changes
-			.distinctUntilChanged();
-
-		final val isInTemple = regionChanged
-			.map( regionId -> regionId == TempleMinigame.RegionId );
-
-		final val pluginIsEnabled = pluginEnabled
-			.filter( value -> value == true );
-
-		final val shouldReplaceWidget = Observable.fromCallable( () -> config.getReplaceWidget() )
-			.concatWith( configChanged
-				// when value changes
-				.filter( event -> event.getKey() == MorttoolsConfig.replaceWidget )
-				// get latest value
-				.map( event -> config.getReplaceWidget() ) );
-
-		final val showOverlay = Observable.combineLatest(
-				pluginIsEnabled,
-				shouldReplaceWidget,
-				isInTemple,
-				( a, b, c ) -> a && b && c )
-			.distinctUntilChanged();
-
-		subscriptions.add( showOverlay
-			.filter( value -> value == true )
-			.subscribe( value -> overlayManager.add( templeOverlay ) ) );
-
-		subscriptions.add( showOverlay
-			.filter( value -> value == false )
-			.subscribe( value -> overlayManager.remove( templeOverlay ) ) );
-
-		subscriptions.add( showOverlay
-			.subscribe( value ->
+		disposable.add( gameStateChanged
+			// when logged in
+			.filter( event -> event.getGameState() == GameState.LOGGED_IN )
+			// get world region
+			.map( event ->
 			{
-				final val widget = client.getWidget( TempleMinigame.WidgetId );
-				if ( widget != null ) widget.setHidden( value );
-			} ) );
-
-		pluginEnabled.onNext( true );
+				val player = client.getLocalPlayer();
+				return player != null ? player.getWorldLocation().getRegionID() : -1;
+			} )
+			// only emit when value changes
+			.distinctUntilChanged()
+			.subscribe( regionChanged::onNext ) );
 	}
 
 	@Override
 	protected void shutDown() throws Exception
 	{
-		log.debug( "shutDown" );
-
-		pluginEnabled.onNext( false );
-
-		subscriptions.forEach( disposable -> disposable.dispose() );
-		subscriptions.clear();
+		disposable.dispose();
+		disposable = null;
 	}
 
 	@Subscribe

@@ -8,7 +8,7 @@ import net.runelite.client.config.ConfigSection;
 @ConfigGroup( "morttools" )
 public interface MorttoolsConfig extends Config
 {
-	public static final String replaceWidget = "replaceWidget";
+	public static final String overlayEnabled = "overlayEnabled";
 	public static final String notifyRepair = "notifyRepair";
 	public static final String notifyResources = "notifyResources";
 	public static final String notifySanctity = "notifySanctity";
@@ -21,13 +21,13 @@ public interface MorttoolsConfig extends Config
 	String templeSection = "templeSection";
 
 	@ConfigItem(
-		keyName = replaceWidget,
-		name = "Replace Temple UI",
+		keyName = overlayEnabled,
+		name = "Enable Overlay",
 		description = "Replace the temple's default interface with an overlay that can be moved",
 		section = templeSection,
 		position = 0
 	)
-	default boolean getReplaceWidget() { return true; }
+	default boolean getOverlayEnabled() { return true; }
 
 	@ConfigItem(
 		keyName = notifyRepair,
