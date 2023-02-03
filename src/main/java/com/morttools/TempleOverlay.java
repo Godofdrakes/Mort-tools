@@ -1,12 +1,14 @@
 package com.morttools;
 
+import com.google.inject.Inject;
 import io.reactivex.rxjava3.core.Observable;
 import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
 import lombok.val;
-import net.runelite.api.widgets.WidgetInfo;
+import net.runelite.api.Client;
 import net.runelite.client.ui.overlay.Overlay;
+import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.ui.overlay.OverlayPriority;
 import net.runelite.client.ui.overlay.components.LineComponent;
@@ -31,7 +33,7 @@ public class TempleOverlay extends Overlay implements Disposable
 		}
 	}
 
-	private static Color getColor( List<ColorSetting> colorSettings, int value )
+	private static Color getColor( int value, List<ColorSetting> colorSettings )
 	{
 		for ( ColorSetting setting : colorSettings )
 		{
@@ -44,12 +46,12 @@ public class TempleOverlay extends Overlay implements Disposable
 		return Color.white;
 	}
 
-	private static final int WidgetGroup = 171;
-	private static final int WidgetChild = 2;
-	private static final int WidgetId = WidgetInfo.PACK( WidgetGroup, WidgetChild );
+	private static String getText( int value )
+	{
+		return String.format( "%d%%", value );
+	}
 
 	private final CompositeDisposable disposable = new CompositeDisposable();
-
 	private final PanelComponent panelComponent = new PanelComponent();
 
 	private final List<ColorSetting> sanctityColors = new ArrayList<>();
@@ -64,9 +66,20 @@ public class TempleOverlay extends Overlay implements Disposable
 	private Color resourceColor;
 	private Color sanctityColor;
 
-	public TempleOverlay( MorttoolsPlugin plugin, TempleMinigame temple, Scheduler scheduler )
+	private final Client client;
+	private final OverlayManager overlayManager;
+
+	@Inject
+	public TempleOverlay(
+		IPluginEventsService plugin,
+		TempleMinigame templeMinigame,
+		MorttoolsConfig config,
+		OverlayManager overlayManager,
+		Client client,
+		Scheduler scheduler )
 	{
-		val config = plugin.getConfig();
+		this.overlayManager = overlayManager;
+		this.client = client;
 
 		repairColors.add( new ColorSetting( 100, Color.GREEN ) );
 		repairColors.add( new ColorSetting( 90, Color.YELLOW ) );
@@ -80,91 +93,64 @@ public class TempleOverlay extends Overlay implements Disposable
 		sanctityColors.add( new ColorSetting( 10, Color.YELLOW ) );
 		sanctityColors.add( new ColorSetting( 0, Color.RED ) );
 
-		disposable.addAll(
-			temple.repair.observeOn( scheduler ).subscribe( value -> setRepair( value ) ),
-			temple.resources.observeOn( scheduler ).subscribe( value -> setResources( value ) ),
-			temple.sanctity.observeOn( scheduler ).subscribe( value -> setSanctity( value ) )
-		);
-
-		// overlay enabled/disabled from config
-		val overlayEnabled = Observable
-			.concat(
-				Observable.just( config.getOverlayEnabled() ),
-				plugin.getConfigChanged()
-					.filter( event -> event.getKey() == MorttoolsConfig.overlayEnabled )
-					.map( event -> config.getOverlayEnabled() ) );
-
-		// default minigame widget loaded
-		val widgetLoaded = plugin.getWidgetLoaded()
-			.filter( event -> event.getGroupId() == WidgetGroup )
-			.map( event -> true );
-
-		// default minigame widget closed
-		val widgetClosed = plugin.getWidgetClosed()
-			.filter( event -> event.getGroupId() == WidgetGroup )
-			.map( event -> false );
-
-		val widgetDesired = widgetLoaded.mergeWith( widgetClosed );
-
-		val showOverlay = Observable.combineLatest(
-			widgetDesired,
-			overlayEnabled.observeOn( scheduler ),
-			( a, b ) -> a && b
-		);
-
-		if ( plugin.getLog().isDebugEnabled() )
-		{
-			disposable.addAll(
-				widgetDesired.subscribe( value -> plugin.getLog().debug( "widgetDesired: {}", value ) ),
-				overlayEnabled.subscribe( value -> plugin.getLog().debug( "overlayEnabled: {}", value ) )
-			);
-		}
-
-		// replace default minigame widget if loaded and overlay is enabled
-		disposable.add( showOverlay
-			.subscribe( value ->
-			{
-				val widget = plugin.getClient().getWidget( WidgetId );
-				if ( widget != null ) widget.setHidden( value );
-
-				val overlayManager = plugin.getOverlayManager();
-				if ( value ) overlayManager.add( this );
-				else overlayManager.remove( this );
-			} ) );
-
-		// Revert any changes we make to the overall client
-		disposable.add( Disposable.fromAction( () ->
-		{
-			val widget = plugin.getClient().getWidget( WidgetId );
-			if ( widget != null ) widget.setHidden( false );
-
-			plugin.getOverlayManager().remove( this );
-		} ) );
-
 		setPosition( OverlayPosition.TOP_RIGHT );
 		setPriority( OverlayPriority.HIGHEST );
 
 		setRepair( 0 );
 		setResources( 0 );
 		setSanctity( 0 );
+
+		disposable.addAll(
+			templeMinigame.repair.observeOn( scheduler ).subscribe( value -> setRepair( value ) ),
+			templeMinigame.resources.observeOn( scheduler ).subscribe( value -> setResources( value ) ),
+			templeMinigame.sanctity.observeOn( scheduler ).subscribe( value -> setSanctity( value ) )
+		);
+
+		// overlay enabled/disabled from config
+		val overlayEnabled = Observable.fromCallable( () -> config.getOverlayEnabled() )
+			.concatWith( plugin.getConfigChanged()
+				.filter( event -> event.getKey().equals( MorttoolsConfig.overlayEnabled ) )
+				.map( event -> config.getOverlayEnabled() ) );
+
+		val showOverlay = Observable.combineLatest(
+				templeMinigame.isWidgetLoaded,
+				overlayEnabled,
+				( a, b ) -> a && b
+			)
+			.observeOn( scheduler );
+
+		// replace default minigame widget if loaded and overlay is enabled
+		disposable.add( showOverlay.subscribe( value -> setEnabled( value ) ) );
+
+		// Revert any changes we make to the overall client
+		disposable.add( Disposable.fromAction( () -> setEnabled( false ) ) );
+	}
+
+	public void setEnabled( boolean value )
+	{
+		val widget = client.getWidget( TempleMinigame.WIDGET_ID );
+		if ( widget != null ) widget.setHidden( value );
+
+		if ( value ) overlayManager.add( this );
+		else overlayManager.remove( this );
 	}
 
 	public void setRepair( int value )
 	{
-		repairText = String.format( "%d%%", value );
-		repairColor = getColor( repairColors, value );
+		repairText = getText( value );
+		repairColor = getColor( value, repairColors );
 	}
 
 	public void setResources( int value )
 	{
-		resourcesText = String.format( "%d%%", value );
-		resourceColor = getColor( resourceColors, value );
+		resourcesText = getText( value );
+		resourceColor = getColor( value, resourceColors );
 	}
 
 	public void setSanctity( int value )
 	{
-		sanctityText = String.format( "%d%%", value );
-		sanctityColor = getColor( sanctityColors, value );
+		sanctityText = getText( value );
+		sanctityColor = getColor( value, sanctityColors );
 	}
 
 	@Override

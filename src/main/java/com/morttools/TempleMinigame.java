@@ -1,59 +1,79 @@
 package com.morttools;
 
+import com.google.inject.Inject;
 import io.reactivex.rxjava3.core.Observable;
-import io.reactivex.rxjava3.core.Scheduler;
-import io.reactivex.rxjava3.disposables.CompositeDisposable;
-import io.reactivex.rxjava3.disposables.Disposable;
+import lombok.val;
+import net.runelite.api.widgets.WidgetInfo;
 
-public class TempleMinigame implements Disposable
+public class TempleMinigame
 {
-	private static final int VARP_REPAIR = 343;
-	private static final int VARP_RESOURCES = 344;
-	private static final int VARP_SANCTITY = 345;
+	private static Observable<Boolean> IsFull( Observable<Integer> observable, int threshold )
+	{
+		return observable.map( value -> value >= threshold ).distinctUntilChanged();
+	}
 
-	private static final int REGION_TEMPLE = 13875;
+	private static Observable<Boolean> IsLow( Observable<Integer> observable, int threshold )
+	{
+		return observable.map( value -> value <= threshold ).distinctUntilChanged();
+	}
+
+	public static final int VARP_REPAIR = 343;
+	public static final int VARP_RESOURCES = 344;
+	public static final int VARP_SANCTITY = 345;
+
+	public static final int REGION_TEMPLE = 13875;
+
+	public static final int WIDGET_GROUP = 171;
+	public static final int WIDGET_ID = WidgetInfo.PACK( WIDGET_GROUP, 2 );
 
 	public final Observable<Integer> repair;
 	public final Observable<Integer> resources;
 	public final Observable<Integer> sanctity;
 
-	private final CompositeDisposable disposable = new CompositeDisposable();
+	public final Observable<Boolean> repairLow;
+	public final Observable<Boolean> resourcesLow;
+	public final Observable<Boolean> sanctityFull;
 
-	public TempleMinigame( MorttoolsPlugin plugin, Scheduler scheduler )
+	public final Observable<Boolean> isInTemple;
+	public final Observable<Boolean> isWidgetLoaded;
+
+	@Inject
+	public TempleMinigame( IPluginEventsService plugin )
 	{
-		repair = plugin.getVarbitChanged()
-			// when repair changes
-			.filter( event -> event.getVarpId() == VARP_REPAIR )
-			// get latest value
-			.map( event -> event.getValue() );
+		repair = Observable.just( 0 )
+			.concatWith( plugin.getVarbitChanged()
+				// when repair changes
+				.filter( event -> event.getVarpId() == VARP_REPAIR )
+				// get latest value
+				.map( event -> event.getValue() ) );
 
-		resources = plugin.getVarbitChanged()
-			.filter( event -> event.getVarpId() == VARP_RESOURCES )
-			.map( event -> event.getValue() );
+		resources = Observable.just( 0 )
+			.concatWith( plugin.getVarbitChanged()
+				.filter( event -> event.getVarpId() == VARP_RESOURCES )
+				.map( event -> event.getValue() ) );
 
-		sanctity = plugin.getVarbitChanged()
-			.filter( event -> event.getVarpId() == VARP_SANCTITY )
-			.map( event -> event.getValue() );
+		sanctity = Observable.just( 0 )
+			.concatWith( plugin.getVarbitChanged()
+				.filter( event -> event.getVarpId() == VARP_SANCTITY )
+				.map( event -> event.getValue() ) );
 
-		if ( plugin.getLog().isDebugEnabled() )
-		{
-			disposable.addAll(
-				repair.subscribe( value -> plugin.getLog().debug( "repair: {}", value ) ),
-				resources.subscribe( value -> plugin.getLog().debug( "resources: {}", value ) ),
-				sanctity.subscribe( value -> plugin.getLog().debug( "sanctity: {}", value ) )
-			);
-		}
-	}
+		repairLow = IsLow( repair, 90 );
+		resourcesLow = IsLow( resources, 10 );
+		sanctityFull = IsFull( sanctity, 100 );
 
-	@Override
-	public void dispose()
-	{
-		disposable.dispose();
-	}
+		isInTemple = plugin.getRegionChanged()
+			.map( value -> value == REGION_TEMPLE )
+			.distinctUntilChanged();
 
-	@Override
-	public boolean isDisposed()
-	{
-		return disposable.isDisposed();
+		val widgetLoaded = plugin.getWidgetLoaded()
+			.filter( event -> event.getGroupId() == WIDGET_GROUP )
+			.map( event -> true );
+
+		val widgetClosed = plugin.getWidgetClosed()
+			.filter( event -> event.getGroupId() == WIDGET_GROUP )
+			.map( event -> false );
+
+		isWidgetLoaded = Observable.merge( widgetLoaded, widgetClosed )
+			.distinctUntilChanged();
 	}
 }

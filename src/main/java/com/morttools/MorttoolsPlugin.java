@@ -1,11 +1,11 @@
 package com.morttools;
 
+import com.google.inject.Binder;
 import com.google.inject.Provides;
-import io.reactivex.rxjava3.core.Observable;
+import com.google.inject.Scopes;
+import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
-import io.reactivex.rxjava3.subjects.BehaviorSubject;
-import io.reactivex.rxjava3.subjects.PublishSubject;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
 import net.runelite.api.Client;
@@ -19,7 +19,6 @@ import net.runelite.client.events.ConfigChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.overlay.OverlayManager;
-import org.slf4j.Logger;
 
 import javax.inject.Inject;
 
@@ -39,101 +38,47 @@ public class MorttoolsPlugin extends Plugin
 	private Notifier notifier;
 	@Inject
 	private Client client;
+	@Inject
+	private PluginEvents pluginEvents;
 
 	private CompositeDisposable disposable;
 
-	private final PublishSubject<ConfigChanged> configChanged = PublishSubject.create();
-	private final PublishSubject<WidgetLoaded> widgetLoaded = PublishSubject.create();
-	private final PublishSubject<WidgetClosed> widgetClosed = PublishSubject.create();
-	private final PublishSubject<VarbitChanged> varbitChanged = PublishSubject.create();
-	private final PublishSubject<GameStateChanged> gameStateChanged = PublishSubject.create();
-
-	private final PublishSubject<GameObjectSpawned> gameObjectSpawned = PublishSubject.create();
-	private final PublishSubject<GameObjectDespawned> gameObjectDespawned = PublishSubject.create();
-	private final BehaviorSubject<Integer> regionChanged = BehaviorSubject.create();
-
-	public Observable<ConfigChanged> getConfigChanged()
+	@Provides
+	MorttoolsConfig getConfig( ConfigManager configManager )
 	{
-		return configChanged;
+		return configManager.getConfig( MorttoolsConfig.class );
 	}
 
-	public Observable<WidgetLoaded> getWidgetLoaded()
+	@Provides
+	public Scheduler getScheduler( ClientThread clientThread )
 	{
-		return widgetLoaded;
+		// scheduler used to ensure subscriptions are invoked on the client thread
+		return Schedulers.from( clientThread::invoke );
 	}
 
-	public Observable<WidgetClosed> getWidgetClosed()
+	@Override
+	public void configure( Binder binder )
 	{
-		return widgetClosed;
-	}
-
-	public Observable<VarbitChanged> getVarbitChanged()
-	{
-		return varbitChanged;
-	}
-
-	public Observable<GameStateChanged> getGameStateChanged()
-	{
-		return gameStateChanged;
-	}
-
-	public Observable<GameObjectSpawned> getGameObjectSpawned()
-	{
-		return gameObjectSpawned;
-	}
-
-	public Observable<GameObjectDespawned> getGameObjectDespawned()
-	{
-		return gameObjectDespawned;
-	}
-
-	public Observable<Integer> getRegionChanged()
-	{
-		return regionChanged;
-	}
-
-	public OverlayManager getOverlayManager()
-	{
-		return overlayManager;
-	}
-
-	public MorttoolsConfig getConfig()
-	{
-		return config;
-	}
-
-	public Notifier getNotifier()
-	{
-		return notifier;
-	}
-
-	public Client getClient()
-	{
-		return client;
-	}
-
-	public Logger getLog()
-	{
-		return log;
+		binder.bind( IPluginEventsService.class ).to( PluginEvents.class );
+		binder.bind( PluginEvents.class ).in( Scopes.SINGLETON );
+		binder.bind( TempleMinigame.class ).in( Scopes.SINGLETON );
+		binder.bind( TempleOverlay.class );
+		binder.bind( TempleNotifications.class );
 	}
 
 	@Override
 	protected void startUp() throws Exception
 	{
-		// config changes are pushed from a background thread
-		// must use a scheduler to safely observe events from the client thread instead
-		final val clientScheduler = Schedulers.from( runnable -> clientThread.invoke( runnable ) );
-
-		val templeMinigame = new TempleMinigame( this, clientScheduler );
-
 		disposable = new CompositeDisposable();
 
-		disposable.addAll(
-			templeMinigame,
-			new TempleOverlay( this, templeMinigame, clientScheduler ),
-			new TempleNotifications( this, templeMinigame, clientScheduler ) );
+		val templeMinigame = this.injector.getInstance( TempleMinigame.class );
+		val templeOverlay = this.injector.getInstance( TempleOverlay.class );
+		val templeNotifications = this.injector.getInstance( TempleNotifications.class );
 
-		disposable.add( gameStateChanged
+		disposable.addAll( templeOverlay, templeNotifications );
+
+		// monitor for region changes
+		disposable.add( pluginEvents.getGameStateChanged()
 			// when logged in
 			.filter( event -> event.getGameState() == GameState.LOGGED_IN )
 			// get world region
@@ -144,17 +89,21 @@ public class MorttoolsPlugin extends Plugin
 			} )
 			// only emit when value changes
 			.distinctUntilChanged()
-			.subscribe( regionChanged::onNext ) );
+			.subscribe( pluginEvents.regionChanged::onNext ) );
 
-//		if ( log.isDebugEnabled() )
-//		{
-//			disposable.addAll(
-//				this.getConfigChanged().subscribe( event -> log.debug( "configChanged: {}", event.getKey() ) ),
-//				this.getRegionChanged().subscribe( regionId -> log.debug( "regionChanged: {}", regionId ) ),
-//				this.getWidgetLoaded().subscribe( event -> log.debug( "widgetLoaded: {}", event.getGroupId() ) ),
-//				this.getWidgetClosed().subscribe( event -> log.debug( "widgetClosed: {}", event.getGroupId() ) )
-//			);
-//		}
+		if ( log.isDebugEnabled() )
+		{
+			disposable.addAll(
+				templeMinigame.repair.subscribe( value -> log.debug( "repair: {}", value ) ),
+				templeMinigame.resources.subscribe( value -> log.debug( "resources: {}", value ) ),
+				templeMinigame.sanctity.subscribe( value -> log.debug( "sanctity: {}", value ) ),
+				templeMinigame.repairLow.subscribe( value -> log.debug( "repairLow: {}", value ) ),
+				templeMinigame.resourcesLow.subscribe( value -> log.debug( "resourcesLow: {}", value ) ),
+				templeMinigame.sanctityFull.subscribe( value -> log.debug( "sanctityFull: {}", value ) ),
+				templeMinigame.isInTemple.subscribe( value -> log.debug( "isInTemple: {}", value ) ),
+				templeMinigame.isWidgetLoaded.subscribe( value -> log.debug( "isWidgetLoaded: {}", value ) )
+			);
+		}
 	}
 
 	@Override
@@ -165,50 +114,23 @@ public class MorttoolsPlugin extends Plugin
 	}
 
 	@Subscribe
-	public void onConfigChanged( ConfigChanged event )
-	{
-		configChanged.onNext( event );
-	}
+	public void onConfigChanged( ConfigChanged event ) { pluginEvents.configChanged.onNext( event ); }
 
 	@Subscribe
-	public void onVarbitChanged( VarbitChanged event )
-	{
-		varbitChanged.onNext( event );
-	}
+	public void onVarbitChanged( VarbitChanged event ) { pluginEvents.varbitChanged.onNext( event ); }
 
 	@Subscribe
-	public void onGameStateChanged( GameStateChanged event )
-	{
-		gameStateChanged.onNext( event );
-	}
+	public void onGameStateChanged( GameStateChanged event ) { pluginEvents.gameStateChanged.onNext( event ); }
 
 	@Subscribe
-	public void onWidgetLoaded( WidgetLoaded event )
-	{
-		widgetLoaded.onNext( event );
-	}
+	public void onWidgetLoaded( WidgetLoaded event ) { pluginEvents.widgetLoaded.onNext( event ); }
 
 	@Subscribe
-	public void onWidgetClosed( WidgetClosed event )
-	{
-		widgetClosed.onNext( event );
-	}
+	public void onWidgetClosed( WidgetClosed event ) { pluginEvents.widgetClosed.onNext( event ); }
 
 	@Subscribe
-	public void onGameObjectSpawned( GameObjectSpawned event )
-	{
-		gameObjectSpawned.onNext( event );
-	}
+	public void onGameObjectSpawned( GameObjectSpawned event ) { pluginEvents.gameObjectSpawned.onNext( event ); }
 
 	@Subscribe
-	public void onGameObjectDespawned( GameObjectDespawned event )
-	{
-		gameObjectDespawned.onNext( event );
-	}
-
-	@Provides
-	MorttoolsConfig provideConfig( ConfigManager configManager )
-	{
-		return configManager.getConfig( MorttoolsConfig.class );
-	}
+	public void onGameObjectDespawned( GameObjectDespawned event ) { pluginEvents.gameObjectDespawned.onNext( event ); }
 }
