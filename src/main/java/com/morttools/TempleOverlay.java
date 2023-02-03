@@ -5,6 +5,7 @@ import io.reactivex.rxjava3.core.Observable;
 import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
+import lombok.Value;
 import lombok.val;
 import net.runelite.api.Client;
 import net.runelite.client.ui.overlay.Overlay;
@@ -21,16 +22,11 @@ import java.util.List;
 
 public class TempleOverlay extends Overlay implements Disposable
 {
+	@Value
 	private class ColorSetting
 	{
 		public final int value;
 		public final Color color;
-
-		public ColorSetting( int value, Color color )
-		{
-			this.value = value;
-			this.color = color;
-		}
 	}
 
 	private static Color getColor( int value, List<ColorSetting> colorSettings )

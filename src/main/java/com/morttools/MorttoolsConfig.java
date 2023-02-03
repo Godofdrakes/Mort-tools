@@ -8,10 +8,10 @@ import net.runelite.client.config.ConfigSection;
 @ConfigGroup( "morttools" )
 public interface MorttoolsConfig extends Config
 {
-	public static final String overlayEnabled = "overlayEnabled";
-	public static final String notifyRepair = "notifyRepair";
-	public static final String notifyResources = "notifyResources";
-	public static final String notifySanctity = "notifySanctity";
+	String overlayEnabled = "overlayEnabled";
+	String notifyRepair = "notifyRepair";
+	String notifyResources = "notifyResources";
+	String notifySanctity = "notifySanctity";
 
 	@ConfigSection(
 		name = "Temple",
