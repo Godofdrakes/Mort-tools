@@ -6,6 +6,8 @@ import net.runelite.client.events.ConfigChanged;
 
 public interface IPluginEventsService
 {
+	Observable<GameTick> getGameTick();
+
 	Observable<ConfigChanged> getConfigChanged();
 
 	Observable<WidgetLoaded> getWidgetLoaded();

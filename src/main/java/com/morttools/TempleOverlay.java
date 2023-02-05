@@ -25,11 +25,11 @@ public class TempleOverlay extends Overlay implements Disposable
 	@Value
 	private class ColorSetting
 	{
-		public final int value;
+		public final long value;
 		public final Color color;
 	}
 
-	private static Color getColor( int value, List<ColorSetting> colorSettings )
+	private static Color getColor( long value, List<ColorSetting> colorSettings )
 	{
 		for ( ColorSetting setting : colorSettings )
 		{
@@ -42,25 +42,30 @@ public class TempleOverlay extends Overlay implements Disposable
 		return Color.white;
 	}
 
-	private static String getText( int value )
+	private static String getText( long value, String suffix )
 	{
-		return String.format( "%d%%", value );
+		return String.format( "%d%s", value, suffix );
 	}
 
 	private final CompositeDisposable disposable = new CompositeDisposable();
 	private final PanelComponent panelComponent = new PanelComponent();
 
-	private final List<ColorSetting> sanctityColors = new ArrayList<>();
-	private final List<ColorSetting> resourceColors = new ArrayList<>();
-	private final List<ColorSetting> repairColors = new ArrayList<>();
+	private final List<ColorSetting> sanctityColorSettings = new ArrayList<>();
+	private final List<ColorSetting> resourceColorSettings = new ArrayList<>();
+	private final List<ColorSetting> repairColorSettings = new ArrayList<>();
+	private final List<ColorSetting> altarColorSettings = new ArrayList<>();
 
 	private String repairText;
 	private String resourcesText;
 	private String sanctityText;
+	private String altarText;
 
 	private Color repairColor;
 	private Color resourceColor;
 	private Color sanctityColor;
+	private Color altarColor;
+
+	private MorttoolsConfig.AltarLit altarDisplayMode;
 
 	private final Client client;
 	private final OverlayManager overlayManager;
@@ -77,17 +82,21 @@ public class TempleOverlay extends Overlay implements Disposable
 		this.overlayManager = overlayManager;
 		this.client = client;
 
-		repairColors.add( new ColorSetting( 100, Color.GREEN ) );
-		repairColors.add( new ColorSetting( 90, Color.YELLOW ) );
-		repairColors.add( new ColorSetting( 0, Color.RED ) );
+		repairColorSettings.add( new ColorSetting( 100, Color.GREEN ) );
+		repairColorSettings.add( new ColorSetting( 90, Color.YELLOW ) );
+		repairColorSettings.add( new ColorSetting( 0, Color.RED ) );
 
-		resourceColors.add( new ColorSetting( 100, Color.GREEN ) );
-		resourceColors.add( new ColorSetting( 10, Color.YELLOW ) );
-		resourceColors.add( new ColorSetting( 0, Color.RED ) );
+		resourceColorSettings.add( new ColorSetting( 100, Color.GREEN ) );
+		resourceColorSettings.add( new ColorSetting( 10, Color.YELLOW ) );
+		resourceColorSettings.add( new ColorSetting( 0, Color.RED ) );
 
-		sanctityColors.add( new ColorSetting( 100, Color.GREEN ) );
-		sanctityColors.add( new ColorSetting( 10, Color.YELLOW ) );
-		sanctityColors.add( new ColorSetting( 0, Color.RED ) );
+		sanctityColorSettings.add( new ColorSetting( 100, Color.GREEN ) );
+		sanctityColorSettings.add( new ColorSetting( 10, Color.YELLOW ) );
+		sanctityColorSettings.add( new ColorSetting( 0, Color.RED ) );
+
+		altarColorSettings.add( new ColorSetting( 10, Color.GREEN ) );
+		altarColorSettings.add( new ColorSetting( 1, Color.yellow ) );
+		altarColorSettings.add( new ColorSetting( 0, Color.RED ) );
 
 		setPosition( OverlayPosition.TOP_RIGHT );
 		setPriority( OverlayPriority.HIGHEST );
@@ -95,11 +104,20 @@ public class TempleOverlay extends Overlay implements Disposable
 		setRepair( 0 );
 		setResources( 0 );
 		setSanctity( 0 );
+		setAltarDisplayMode( MorttoolsConfig.AltarLit.SecondsRemaining );
+		setAltarTickSpan( TickSpan.ZERO );
+
+		val showAltarSeconds = Observable.fromCallable( () -> config.getAltarLitOverlay() )
+			.concatWith( plugin.getConfigChanged()
+				.filter( value -> value.getKey().equals( MorttoolsConfig.altarLitOverlay ) )
+				.map( value -> config.getAltarLitOverlay() ) );
 
 		disposable.addAll(
-			templeMinigame.repair.observeOn( scheduler ).subscribe( value -> setRepair( value ) ),
-			templeMinigame.resources.observeOn( scheduler ).subscribe( value -> setResources( value ) ),
-			templeMinigame.sanctity.observeOn( scheduler ).subscribe( value -> setSanctity( value ) )
+			templeMinigame.repair.subscribe( this::setRepair ),
+			templeMinigame.resources.subscribe( this::setResources ),
+			templeMinigame.sanctity.subscribe( this::setSanctity ),
+			templeMinigame.altarTicksRemaining.subscribe( this::setAltarTickSpan ),
+			showAltarSeconds.observeOn( scheduler ).subscribe( this::setAltarDisplayMode )
 		);
 
 		// overlay enabled/disabled from config
@@ -116,7 +134,7 @@ public class TempleOverlay extends Overlay implements Disposable
 			.observeOn( scheduler );
 
 		// replace default minigame widget if loaded and overlay is enabled
-		disposable.add( showOverlay.subscribe( value -> setEnabled( value ) ) );
+		disposable.add( showOverlay.subscribe( this::setEnabled ) );
 
 		// Revert any changes we make to the overall client
 		disposable.add( Disposable.fromAction( () -> setEnabled( false ) ) );
@@ -133,20 +151,45 @@ public class TempleOverlay extends Overlay implements Disposable
 
 	public void setRepair( int value )
 	{
-		repairText = getText( value );
-		repairColor = getColor( value, repairColors );
+		repairText = getText( value, "%" );
+		repairColor = getColor( value, repairColorSettings );
 	}
 
 	public void setResources( int value )
 	{
-		resourcesText = getText( value );
-		resourceColor = getColor( value, resourceColors );
+		resourcesText = getText( value, "%" );
+		resourceColor = getColor( value, resourceColorSettings );
 	}
 
 	public void setSanctity( int value )
 	{
-		sanctityText = getText( value );
-		sanctityColor = getColor( value, sanctityColors );
+		sanctityText = getText( value, "%" );
+		sanctityColor = getColor( value, sanctityColorSettings );
+	}
+
+	public void setAltarTickSpan( TickSpan value )
+	{
+		switch (altarDisplayMode)
+		{
+			case Disabled:
+				// do nothing
+				break;
+			case TicksRemaining:
+				val ticks = value.getTicks();
+				altarText = getText( ticks, "t" );
+				altarColor = getColor( ticks, altarColorSettings );
+				break;
+			case SecondsRemaining:
+				val seconds = value.getSeconds();
+				altarText = getText( seconds, "s" );
+				altarColor = getColor( seconds, altarColorSettings );
+				break;
+		}
+	}
+
+	public void setAltarDisplayMode( MorttoolsConfig.AltarLit value )
+	{
+		altarDisplayMode = value;
 	}
 
 	@Override
@@ -178,6 +221,15 @@ public class TempleOverlay extends Overlay implements Disposable
 			.right( sanctityText )
 			.rightColor( sanctityColor )
 			.build() );
+
+		if ( altarDisplayMode != MorttoolsConfig.AltarLit.Disabled )
+		{
+			panelComponent.getChildren().add( LineComponent.builder()
+				.left( "Altar:" )
+				.right( altarText )
+				.rightColor( altarColor )
+				.build() );
+		}
 
 		return panelComponent.render( graphics );
 	}

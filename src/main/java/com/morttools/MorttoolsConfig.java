@@ -12,6 +12,14 @@ public interface MorttoolsConfig extends Config
 	String notifyRepair = "notifyRepair";
 	String notifyResources = "notifyResources";
 	String notifySanctity = "notifySanctity";
+	String altarLitOverlay = "altarLitOverlay";
+
+	public enum AltarLit
+	{
+		Disabled,
+		TicksRemaining,
+		SecondsRemaining,
+	}
 
 	@ConfigSection(
 		name = "Temple",
@@ -28,6 +36,13 @@ public interface MorttoolsConfig extends Config
 		position = 0
 	)
 	default boolean getOverlayEnabled() { return true; }
+
+	@ConfigItem(
+		keyName = altarLitOverlay,
+		name = "Show Altar Time Remaining",
+		description = "Show the remaining time until the altar goes out"
+	)
+	default AltarLit getAltarLitOverlay() { return AltarLit.SecondsRemaining; }
 
 	@ConfigItem(
 		keyName = notifyRepair,

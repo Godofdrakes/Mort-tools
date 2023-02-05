@@ -41,9 +41,6 @@ public class TempleAltarOverlay
 			colorSettings.get( tileObject.getId() ) );
 	}
 
-	public static final int FLAMING_FIRE_ALTAR = 4090;
-	public static final int UNLIT_FIRE_ALTAR = 4091;
-
 	private final Map<Integer,ObjectColorSettings> colorSettingsMap = new HashMap<>();
 
 	private final ModelOutlineRenderer modelOutlineRenderer;

@@ -3,8 +3,10 @@ package com.morttools;
 import com.google.inject.Binder;
 import com.google.inject.Provides;
 import com.google.inject.Scopes;
+import io.reactivex.rxjava3.core.Observable;
 import io.reactivex.rxjava3.core.Scheduler;
 import io.reactivex.rxjava3.disposables.CompositeDisposable;
+import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 import lombok.extern.slf4j.Slf4j;
 import lombok.val;
@@ -66,6 +68,11 @@ public class MorttoolsPlugin extends Plugin
 		binder.bind( TempleNotifications.class );
 	}
 
+	private <T> Disposable logValues( Observable<T> observable, String label )
+	{
+		return observable.subscribe( value -> log.debug( "{}: {}", label, value ) );
+	}
+
 	@Override
 	protected void startUp() throws Exception
 	{
@@ -94,14 +101,15 @@ public class MorttoolsPlugin extends Plugin
 		if ( log.isDebugEnabled() )
 		{
 			disposable.addAll(
-				templeMinigame.repair.subscribe( value -> log.debug( "repair: {}", value ) ),
-				templeMinigame.resources.subscribe( value -> log.debug( "resources: {}", value ) ),
-				templeMinigame.sanctity.subscribe( value -> log.debug( "sanctity: {}", value ) ),
-				templeMinigame.repairLow.subscribe( value -> log.debug( "repairLow: {}", value ) ),
-				templeMinigame.resourcesLow.subscribe( value -> log.debug( "resourcesLow: {}", value ) ),
-				templeMinigame.sanctityFull.subscribe( value -> log.debug( "sanctityFull: {}", value ) ),
-				templeMinigame.isInTemple.subscribe( value -> log.debug( "isInTemple: {}", value ) ),
-				templeMinigame.isWidgetLoaded.subscribe( value -> log.debug( "isWidgetLoaded: {}", value ) )
+				logValues( templeMinigame.repair, "repair" ),
+				logValues( templeMinigame.resources, "resources" ),
+				logValues( templeMinigame.sanctity, "sanctity" ),
+				logValues( templeMinigame.repairLow, "repairLow" ),
+				logValues( templeMinigame.resourcesLow, "resourcesLow" ),
+				logValues( templeMinigame.sanctityFull, "sanctityFull" ),
+				logValues( templeMinigame.isInTemple, "isInTemple" ),
+				logValues( templeMinigame.isWidgetLoaded, "isWidgetLoaded" ),
+				logValues( templeMinigame.isAltarLit, "isAltarLit" )
 			);
 		}
 	}
@@ -112,6 +120,9 @@ public class MorttoolsPlugin extends Plugin
 		disposable.dispose();
 		disposable = null;
 	}
+
+	@Subscribe
+	public void onGameTick( GameTick event ) { pluginEvents.gameTick.onNext( event ); }
 
 	@Subscribe
 	public void onConfigChanged( ConfigChanged event ) { pluginEvents.configChanged.onNext( event ); }

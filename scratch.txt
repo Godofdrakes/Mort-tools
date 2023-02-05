@@ -18,8 +18,12 @@ game objects
 4079-4089 corner wall 0-100%
     id increases by 1 until full
 4090 flaming fire altar
+    lasts ~58 seconds?
     4091 unlit fire altar
-    4092 unlit fire altar (for like one tick)
+    4092 damaged fire altar
+4093 funeral pyre
+4099 funeral pyre w/logs
+4105 funeral pyre w/remains
 
 map region
 13874 burg

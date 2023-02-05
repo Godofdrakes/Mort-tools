@@ -4,6 +4,7 @@ import com.morttools.PluginEvents;
 import com.morttools.TempleMinigame;
 import io.reactivex.rxjava3.core.Observable;
 import io.reactivex.rxjava3.observers.TestObserver;
+import io.reactivex.rxjava3.schedulers.TestScheduler;
 import junit.framework.TestCase;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.events.WidgetClosed;
@@ -71,6 +72,7 @@ public class MorttoolsTest extends TestCase
 	public void testTempleMinigame()
 	{
 		PluginEvents pluginEvents = new PluginEvents();
+		TestScheduler scheduler = new TestScheduler();
 
 		TestObserver<Integer> repair = TestObserver.create();
 		TestObserver<Integer> resources = TestObserver.create();
@@ -81,7 +83,7 @@ public class MorttoolsTest extends TestCase
 		TestObserver<Boolean> isInTemple = TestObserver.create();
 		TestObserver<Boolean> isWidgetLoaded = TestObserver.create();
 
-		TempleMinigame templeMinigame = new TempleMinigame( pluginEvents );
+		TempleMinigame templeMinigame = new TempleMinigame( pluginEvents, scheduler );
 
 		templeMinigame.repair.subscribe( repair );
 		templeMinigame.resources.subscribe( resources );
